@@ -1250,6 +1250,71 @@ function New-ExternalHelpCab
     }
 }
 
+Function Set-MarkdownHelpParams {
+    [cmdletbinding()]
+    Param (
+        [Parameter(
+            Mandatory = $true
+        )]
+        [string]$Path,
+        [Parameter(
+            Mandatory = $true
+        )]
+        [string]$ParameterName,
+        [string]$Description,
+        [System.Text.Encoding]$Encoding = $script:UTF8_NO_BOM
+    )
+    $oldModels = GetMamlModelImpl $Path -ForAnotherMarkdown -Encoding $Encoding
+
+    if ($oldModels.Count -gt 1)
+    {
+        log -warning ($LocalizedData.FileContainsMoreThanOneCommand -f $filePath)
+        log -warning $LocalizedData.OneCommandPerFile
+        return
+    }
+
+    $oldModel = $oldModels[0]
+    $name = $oldModels.Name
+
+    [Array]$loadedModulesBefore = $(Get-Module | Select-Object -Property Name)
+    $command = Get-Command $name -ErrorAction SilentlyContinue
+    if (-not $command)
+    {
+        if ($Force) {
+            if (Test-Path $filePath) {
+                Remove-Item -Path $filePath -Confirm:$false
+                log -warning ($LocalizedData.CommandNotFoundFileRemoved -f $name, $filePath)
+                return
+            }
+        } else {
+            log -warning ($LocalizedData.CommandNotFoundSkippingFile -f $name, $filePath)
+            return
+        }
+    }
+    elseif (($null -ne $command.ModuleName) -and ($loadedModulesBefore.Name -notcontains $command.ModuleName))
+    {
+        log -warning ($LocalizedData.ModuleImporteAutomaticaly -f $($command.ModuleName))
+    }
+
+    if ($oldModel.Parameters.Name -Contains $ParameterName) {
+
+        $reflectionModel = GetMamlObject -Session $Session -Cmdlet $name -UseFullTypeName:$UseFullTypeName -ExcludeDontShow:$ExcludeDontShow.IsPresent
+        $metadata[$script:MODULE_PAGE_MODULE_NAME] = $reflectionModel.ModuleName
+
+        $merger = New-Object Markdown.MAML.Transformer.MamlModelMerger -ArgumentList $infoCallback
+        $newModel = $merger.Merge($reflectionModel, $oldModel, $UpdateInputOutput)
+
+        ($newModel.Parameters | Where-Object {$_.Name -eq $ParameterName}).Description = $Description
+
+        $metadata = Get-MarkdownMetadata $Path
+        $md = ConvertMamlModelToMarkdown -mamlCommand $new Model -metadata $metadata -PreserveFormatting
+        MySetContent -path $path -value $md -Encoding $Encoding -Force # yield
+    } else {
+        Write-Warning "Parameter '$ParameterName' not found."
+    }
+
+}
+
 #endregion
 
 #region Implementation
