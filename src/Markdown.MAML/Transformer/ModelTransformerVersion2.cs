@@ -106,7 +106,8 @@ namespace Markdown.MAML.Transformer
                 //this is the only way to retain information on which syntax is the default 
                 // without adding new members to command object.
                 //Though the cmdlet object, does have a member which contains the default syntax name only.
-                if (syntax.IsDefault) { commmand.Syntax.Add(syntax); }
+                //if (syntax.IsDefault) { commmand.Syntax.Add(syntax); }
+                commmand.Syntax.Add(syntax);
             }
         }
 
@@ -193,6 +194,7 @@ namespace Markdown.MAML.Transformer
         private void GatherSyntax(MamlCommand command)
         {
             var parameterSetNames = GetParameterSetNames();
+            parameterSetNames.Sort();
             var defaultSetName = string.Empty;
 
             if(command.Syntax.Count == 1 && command.Syntax[0].IsDefault)
@@ -232,8 +234,15 @@ namespace Markdown.MAML.Transformer
                 }
 
                 FillUpSyntax(syntax, setName);
+                
+                // Remove any parameter sets that were already added with the same name
+                command.Syntax.Remove(command.Syntax.Find(i => i.ParameterSetName == setName));
+                
                 command.Syntax.Add(syntax);
             }
+            
+            // Add params to default syntax
+            FillUpSyntax(command.Syntax.Find(i => i.IsDefault == true),ALL_PARAM_SETS_MONIKER);
         }
 
         private List<string> GetParameterSetNames()
